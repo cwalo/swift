@@ -1672,19 +1672,47 @@ func constructOverloadFunction(forDecl declaration: some DeclSyntaxProtocol, lea
   let trivia =
     leadingTrivia + .docLineComment("/// This is an auto-generated wrapper for safer interop\n")
   if let origFuncDecl = declaration.as(FunctionDeclSyntax.self) {
+    // Check if the original function has an explicit visibility modifier.
+    // Clang-imported functions in namespaces may not have one, but still need
+    // 'public' on the wrapper for proper linkage with @_alwaysEmitIntoClient.
+    let hasVisibilityModifier = origFuncDecl.modifiers.contains {
+      switch $0.name.trimmed.text {
+      case "open", "public", "package", "internal", "fileprivate", "private":
+        return true
+      default:
+        return false
+      }
+    }
+    let newModifiers = hasVisibilityModifier
+      ? origFuncDecl.modifiers
+      : origFuncDecl.modifiers + [DeclModifierSyntax(name: .keyword(.public))]
     return DeclSyntax(
       origFuncDecl
         .with(\.signature, newSignature)
         .with(\.body, body)
         .with(\.attributes, AttributeListSyntax(attributes))
+        .with(\.modifiers, newModifiers)
         .with(\.leadingTrivia, trivia))
   }
   if let origInitDecl = declaration.as(InitializerDeclSyntax.self) {
+    // Check if the original initializer has an explicit visibility modifier.
+    let hasVisibilityModifier = origInitDecl.modifiers.contains {
+      switch $0.name.trimmed.text {
+      case "open", "public", "package", "internal", "fileprivate", "private":
+        return true
+      default:
+        return false
+      }
+    }
+    let newModifiers = hasVisibilityModifier
+      ? origInitDecl.modifiers
+      : origInitDecl.modifiers + [DeclModifierSyntax(name: .keyword(.public))]
     return DeclSyntax(
       origInitDecl
         .with(\.signature, newSignature)
         .with(\.body, body)
         .with(\.attributes, AttributeListSyntax(attributes))
+        .with(\.modifiers, newModifiers)
         .with(\.leadingTrivia, trivia))
   }
   throw DiagnosticError(
